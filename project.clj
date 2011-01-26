@@ -1,0 +1,22 @@
+(defproject timezones "0.1.0-SNAPSHOT"
+  :main timezones
+  :aot [timezones]
+  :dev-dependencies [[leiningen/lein-swank "1.1.0"]]
+  :dependencies [[clojure "1.2.0"]
+                 [clojure-contrib "1.2.0"]
+                 [enlive/enlive "1.0.0-SNAPSHOT"]
+                 [compojure "0.4.0"]
+                 [ring/ring-jetty-adapter "0.2.3"]
+                 [batik/batik-transcoder "1.6"]
+                 [batik/batik-svg-dom "1.6"]
+                 [batik/batik-dom "1.6"]
+                 [batik/batik-bridge "1.6"]
+                 [batik/batik-gvt "1.6"]
+                 [batik/batik-util "1.6"]
+                 [batik/batik-ext "1.6"]
+                 [batik/batik-xml "1.6"]
+                 [batik/batik-script "1.6"]
+                 [batik/batik-awt-util "1.6"]
+                 [batik/batik-parser "1.6"]
+                 [batik/batik-css "1.6"]
+                 [xerces/xerces "2.4.0"]])
