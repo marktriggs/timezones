@@ -1,7 +1,6 @@
 (defproject timezones "0.1.0-SNAPSHOT"
   :main timezones
   :aot [timezones]
-  :dev-dependencies [[leiningen/lein-swank "1.1.0"]]
   :dependencies [[clojure "1.2.0"]
                  [clojure-contrib "1.2.0"]
                  [enlive/enlive "1.0.0-SNAPSHOT"]
