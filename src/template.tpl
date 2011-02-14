@@ -1,9 +1,9 @@
 <html>
 
   <head>  
-    <link type="text/css" href="/timezone/css/ui-lightness/jquery-ui-1.8.9.custom.css" rel="stylesheet" />	
-    <script type="text/javascript" src="/timezone/js/jquery-1.4.4.min.js"></script>
-    <script type="text/javascript" src="/timezone/js/jquery-ui-1.8.9.custom.min.js"></script>
+    <link type="text/css" href="css/ui-lightness/jquery-ui-1.8.9.custom.css" rel="stylesheet" />	
+    <script type="text/javascript" src="js/jquery-1.4.4.min.js"></script>
+    <script type="text/javascript" src="js/jquery-ui-1.8.9.custom.min.js"></script>
 
     <style>
       #timezones, #targets { list-style-type: none; margin: 0; padding: 0; float: left; margin-right: 10px; }
@@ -31,7 +31,19 @@
 	      return $(elt).text ();
 	    });
 
-            window.location.href = '/timezone?zones=' + arr.toArray ().join (",");
+            var options = [];
+            options.push ('zones=' + arr.toArray ().join (","));
+
+            if ($("#use-jpeg").is (':checked')) {
+                options.push ('jpeg=true');
+            }
+
+            if ($("#at-date").val ()) {
+                options.push ('at-date=' + $("#at-date").val ());
+            }
+
+
+            window.location.href = '?' + options.join ("&");
           }
         })
       });
@@ -54,7 +66,13 @@
 	    <li id="dummy" class="ui-state-highlight"></li>
 	  </ul>
 	</div>
-	<input id="go" type="button" value="Show timezones">
+	<div style="width: 250px; float: left;">
+	  <div><label><small>Show timezones as at a certain date (yyyy-mm-dd)</small></label></div>
+	  <div><input id="at-date" type="text" value=""></div>
+	  <div><input id="use-jpeg" type="checkbox">Generate JPEG</div>
+	  <div style="margin-top: 10px;"><input id="go" type="button" value="Show timezones"></div>
+	</div>
+
       </div>
 
     </div><!-- End demo -->

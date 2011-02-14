@@ -7,6 +7,7 @@
         compojure.core)
   (:gen-class)
   (:import (java.util TimeZone)
+           (java.text SimpleDateFormat)
            (java.io StringReader ByteArrayOutputStream
                     PipedOutputStream PipedInputStream)
            (org.apache.batik.dom.svg SVGOMDocument)
@@ -20,11 +21,11 @@
                          (throw (Exception. "Couldn't find my template file"))))
 
 
-(defn get-tz-offset [tz]
+(defn get-tz-offset [tz at-time]
   (if (*known-timezones* tz)
     (/
      (.getOffset (TimeZone/getTimeZone tz)
-                 (System/currentTimeMillis))
+                 at-time)
      1000
      60
      60)
@@ -117,32 +118,38 @@
                 s) "_" " "))
 
 
-(defn generate-svg [timezones]
-  (with-out-str
-    (clojure.xml/emit
-     {:tag "svg"
-      :attrs {"xmlns:dc" "http://purl.org/dc/elements/1.1/"
-              "xmlns:svg" "http://www.w3.org/2000/svg"
-              "xmlns" "http://www.w3.org/2000/svg"
-              "width" (str (+ *line-offset* (* *line-length* 24)))
-              "height" (* 100 (inc (count timezones)))
-              "id" "svg2"
-              "version" "1.1"}
-      :content
-      (let [[home & tzs] timezones]
-        (concat (draw-timeline 100 (range 24) (name-from-timezone home))
-                (mapcat (fn [tz y-offset]
-                          (draw-timeline
-                           y-offset
-                           (map #(mod % 24)
-                                (take 24
-                                      (iterate inc
-                                               (- 0
-                                                  (- (get-tz-offset home)
-                                                     (get-tz-offset tz))))))
-                           (name-from-timezone tz)))
-                        tzs
-                        (take (count tzs) (iterate #(+ 100 %) 200)))))})))
+(defn generate-svg [timezones & [at-date]]
+  (let [at-ms (if at-date
+                (.getTime (.parse (SimpleDateFormat. "yyyy-MM-dd")
+                                  at-date))
+                (System/currentTimeMillis))]
+    (with-out-str
+      (clojure.xml/emit
+       {:tag "svg"
+        :attrs {"xmlns:dc" "http://purl.org/dc/elements/1.1/"
+                "xmlns:svg" "http://www.w3.org/2000/svg"
+                "xmlns" "http://www.w3.org/2000/svg"
+                "width" (str (+ *line-offset* (* *line-length* 24)))
+                "height" (* 100 (inc (count timezones)))
+                "id" "svg2"
+                "version" "1.1"}
+        :content
+        (let [[home & tzs] timezones]
+          (concat (draw-timeline 100 (range 24) (name-from-timezone home))
+                  (mapcat (fn [tz y-offset]
+                            (draw-timeline
+                             y-offset
+                             (map #(mod % 24)
+                                  (take 24
+                                        (iterate inc
+                                                 (- 0
+                                                    (- (get-tz-offset home
+                                                                      at-ms)
+                                                       (get-tz-offset tz
+                                                                      at-ms))))))
+                             (name-from-timezone tz)))
+                          tzs
+                          (take (count tzs) (iterate #(+ 100 %) 200)))))}))))
 
 
 
@@ -178,9 +185,10 @@
 
 
 (defroutes main-routes
-  (GET "/" {{:strs [zones jpeg]} :params}
+  (GET "/" {{:strs [zones jpeg at-date]} :params}
        (if zones
-         (try (let [svg (generate-svg (.split zones ","))]
+         (try (let [svg (generate-svg (.split zones ",")
+                                      at-date)]
                 (if jpeg
                   {:headers {"Content-type" "image/jpeg"}
                    :body (svg-to-jpeg svg)}
