@@ -5,9 +5,7 @@ different timezones and want to see how your hours line up.  Makes use
 of Java's timezone data to hopefully handle daylight savings
 correctly.
 
-Here's a sample:
-
-  ![sample timezone](http://dishevelled.net/timezone/?zones=Australia/Canberra,America/New_York&jpeg=true)
+<img src="http://dishevelled.net/timezone/?zones=Australia/Canberra,America/New_York&jpeg=true">
 
 Behind the scenes this is implemented using Compojure, Enlive (for
 templating), Clojure's built-in XML functionality, JQuery and Batik
