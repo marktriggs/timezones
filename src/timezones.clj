@@ -54,7 +54,7 @@
                        x y (+ x length) y)}})
 
 
-(defn draw-point [x y label]
+(defn draw-point [x y label day]
   [{:tag "circle"
     :attrs {"cx" x
             "cy" y
@@ -67,7 +67,15 @@
             "dy" (* 4 *point-size*)
             "font-family" "Bitstream Vera Sans"
             "font-size" "12px"}
-    :content [label]}])
+    :content [label]}
+   {:tag "text"
+    :attrs {"x" x
+            "y" y
+            "dx" "-2em"
+            "dy" (* 8 *point-size*)
+            "font-family" "Bitstream Vera Sans"
+            "font-size" "10px"}
+    :content [day]}])
 
 
 (defn draw-label [y label]
@@ -101,21 +109,35 @@
       (format "%d:%0,2d" h (int (* m 60))))))
 
 
-(defn draw-timeline [y-offset hours label]
+(defn draw-timeline [y-offset hours days label]
   (concat
    [(draw-line *line-offset* y-offset (* (dec 24) *line-length*))
     (draw-label y-offset label)]
    (draw-work-hours hours y-offset)
-   (mapcat (fn [[idx hour]]
+   (mapcat (fn [[idx hour] day]
              (draw-point (+ *line-offset* (* idx *line-length*))
                          y-offset
-                         (format-hour hour)))
-           (indexed hours))))
+                         (format-hour hour)
+                         day))
+           (indexed hours)
+           days)))
 
 
 (defn name-from-timezone [s]
   (.replace (or (second (.split s "/"))
                 s) "_" " "))
+
+
+(defn midnight-of [epoch-ms]
+  (.getTime (doto (java.util.Date. epoch-ms)
+              (.setHours 0)
+              (.setMinutes 0)
+              (.setSeconds 0))))
+
+
+(defn date-of [epoch-ms]
+  (.format (java.text.SimpleDateFormat. "dd-MMM")
+           (java.util.Date. epoch-ms)))
 
 
 (defn generate-svg [timezones & [at-date]]
@@ -135,7 +157,12 @@
                 "version" "1.1"}
         :content
         (let [[home & tzs] timezones]
-          (concat (draw-timeline 100 (range 24) (name-from-timezone home))
+          (concat (draw-timeline 100
+                                 (range 24)
+                                 (let [midnight (midnight-of at-ms)]
+                                   (map #(date-of (+ midnight (* 1000 60 60 %)))
+                                        (range 24)))
+                                 (name-from-timezone home))
                   (mapcat (fn [tz y-offset]
                             (draw-timeline
                              y-offset
@@ -147,6 +174,15 @@
                                                                       at-ms)
                                                        (get-tz-offset tz
                                                                       at-ms))))))
+                             (let [midnight (+ (midnight-of at-ms)
+                                               (* (- 0
+                                                     (- (get-tz-offset home
+                                                                       at-ms)
+                                                        (get-tz-offset tz
+                                                                       at-ms)))
+                                                  60 60 1000))]
+                               (map #(date-of (+ midnight (* 1000 60 60 %)))
+                                    (range 24)))
                              (name-from-timezone tz)))
                           tzs
                           (take (count tzs) (iterate #(+ 100 %) 200)))))}))))
@@ -194,9 +230,10 @@
                    :body (svg-to-jpeg svg)}
                   {:headers {"Content-type" "image/svg+xml"}
                    :body svg}))
-              (catch Exception _
+              (catch Exception e
                 {:headers {"Content-type" "text/plain"}
-                 :body "I have no idea what you're talking about."}))
+                 :body "I have no idea what you're talking about."}
+                (.printStackTrace e)))
          {:headers {"Content-type" "text/html"}
           :body (index (sort *known-timezones*))}))
   (route/files "/" {:root "static"}))
