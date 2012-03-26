@@ -185,10 +185,10 @@
 
 
 (defroutes main-routes
-  (GET "/" {{:strs [zones jpeg at-date]} :params}
+  (GET "/" {{:strs [zones jpeg at-date at date on]} :params}
        (if zones
          (try (let [svg (generate-svg (.split zones ",")
-                                      at-date)]
+                                      (or at-date at date on))]
                 (if jpeg
                   {:headers {"Content-type" "image/jpeg"}
                    :body (svg-to-jpeg svg)}
