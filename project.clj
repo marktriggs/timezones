@@ -18,4 +18,5 @@
                  [batik/batik-awt-util "1.6"]
                  [batik/batik-parser "1.6"]
                  [batik/batik-css "1.6"]
-                 [xerces/xerces "2.4.0"]])
+                 [xerces/xerces "2.4.0"]]
+  :dev-dependencies [[swank-clojure/swank-clojure "1.3.2"]])

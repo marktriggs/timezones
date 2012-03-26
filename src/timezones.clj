@@ -6,7 +6,7 @@
         ring.adapter.jetty
         compojure.core)
   (:gen-class)
-  (:import (java.util TimeZone)
+  (:import (java.util TimeZone Date Calendar)
            (java.text SimpleDateFormat)
            (java.io StringReader ByteArrayOutputStream
                     PipedOutputStream PipedInputStream)
@@ -19,17 +19,6 @@
 
 (def *template-file* (or (ClassLoader/getSystemResource "template.tpl")
                          (throw (Exception. "Couldn't find my template file"))))
-
-
-(defn get-tz-offset [tz at-time]
-  (if (*known-timezones* tz)
-    (/
-     (.getOffset (TimeZone/getTimeZone tz)
-                 at-time)
-     1000
-     60
-     60)
-    (throw (Exception. "Unknown timezone"))))
 
 
 (def line-style (str "fill:none;stroke:#000000;stroke-width:2px;"
@@ -96,31 +85,15 @@
                     *line-length*
                     work-hours-style))
        (remove #(= % (dec (count hours)))
-               (positions #(and (>= % 7)
-                                (< % 18))
+               (positions #(and (>= (:hour %) 7)
+                                (< (:hour %) 18))
                           hours))))
 
 
 (defn format-hour [hour]
-  (if (= (int hour) hour)
-    (str hour)
-    (let [h (int hour)
-          m (- (float hour) h)]
-      (format "%d:%0,2d" h (int (* m 60))))))
-
-
-(defn draw-timeline [y-offset hours days label]
-  (concat
-   [(draw-line *line-offset* y-offset (* (dec 24) *line-length*))
-    (draw-label y-offset label)]
-   (draw-work-hours hours y-offset)
-   (mapcat (fn [[idx hour] day]
-             (draw-point (+ *line-offset* (* idx *line-length*))
-                         y-offset
-                         (format-hour hour)
-                         day))
-           (indexed hours)
-           days)))
+  (if (= (:min hour) 0)
+    (str (:hour hour))
+    (format "%d:%0,2d" (:hour hour) (:min hour))))
 
 
 (defn name-from-timezone [s]
@@ -128,23 +101,46 @@
                 s) "_" " "))
 
 
-(defn midnight-of [epoch-ms]
-  (.getTime (doto (java.util.Date. epoch-ms)
-              (.setHours 0)
-              (.setMinutes 0)
-              (.setSeconds 0))))
-
-
-(defn date-of [epoch-ms]
-  (.format (java.text.SimpleDateFormat. "dd-MMM")
-           (java.util.Date. epoch-ms)))
+(defn draw-timeline [y-offset timeline]
+  (concat
+   [(draw-line *line-offset* y-offset (* (dec 24) *line-length*))
+    (draw-label y-offset (name-from-timezone (:timezone timeline)))]
+   (draw-work-hours (:hours timeline) y-offset)
+   (mapcat (fn [[idx hour]]
+             (draw-point (+ *line-offset* (* idx *line-length*))
+                         y-offset
+                         (format-hour hour)
+                         (:day hour)))
+           (indexed (:hours timeline)))))
 
 
 (defn generate-svg [timezones & [at-date]]
-  (let [at-ms (if at-date
-                (.getTime (.parse (SimpleDateFormat. "yyyy-MM-dd")
-                                  at-date))
-                (System/currentTimeMillis))]
+  (let [home-timezone (TimeZone/getTimeZone (first timezones))
+
+        at-date (or at-date
+                    (let [now (.getTime (Calendar/getInstance home-timezone))]
+                      (.format (java.text.SimpleDateFormat. "yyyy-MM-dd")
+                               now)))
+
+        home-start-time (-> (doto (java.text.SimpleDateFormat. "yyyy-MM-dd")
+                              (.setTimeZone home-timezone))
+                            (.parse at-date))
+
+        timelines (map (fn [timezone]
+                         (let [tz (TimeZone/getTimeZone timezone)
+                               cal (doto (Calendar/getInstance tz)
+                                     (.setTime home-start-time))
+                               sdf (doto (java.text.SimpleDateFormat. "dd-MMM")
+                                     (.setTimeZone tz))]
+                           {:timezone timezone
+                            :hours (map (fn [hour]
+                                          (let [result {:day (.format sdf (.getTime cal))
+                                                        :hour (.get cal Calendar/HOUR_OF_DAY)
+                                                        :min (.get cal Calendar/MINUTE)}]
+                                            (.add cal Calendar/HOUR_OF_DAY 1)
+                                            result))
+                                        (range 24))}))
+                       timezones)]
     (with-out-str
       (clojure.xml/emit
        {:tag "svg"
@@ -157,36 +153,10 @@
                 "version" "1.1"}
         :content
         (let [[home & tzs] timezones]
-          (concat (draw-timeline 100
-                                 (range 24)
-                                 (let [midnight (midnight-of at-ms)]
-                                   (map #(date-of (+ midnight (* 1000 60 60 %)))
-                                        (range 24)))
-                                 (name-from-timezone home))
-                  (mapcat (fn [tz y-offset]
-                            (draw-timeline
-                             y-offset
-                             (map #(mod % 24)
-                                  (take 24
-                                        (iterate inc
-                                                 (- 0
-                                                    (- (get-tz-offset home
-                                                                      at-ms)
-                                                       (get-tz-offset tz
-                                                                      at-ms))))))
-                             (let [midnight (+ (midnight-of at-ms)
-                                               (* (- 0
-                                                     (- (get-tz-offset home
-                                                                       at-ms)
-                                                        (get-tz-offset tz
-                                                                       at-ms)))
-                                                  60 60 1000))]
-                               (map #(date-of (+ midnight (* 1000 60 60 %)))
-                                    (range 24)))
-                             (name-from-timezone tz)))
-                          tzs
-                          (take (count tzs) (iterate #(+ 100 %) 200)))))}))))
-
+          (mapcat (fn [timeline y-offset]
+                    (draw-timeline y-offset timeline))
+                  timelines
+                  (iterate #(+ 100 %) 100)))}))))
 
 
 (html/defsnippet timezone-entry *template-file*
