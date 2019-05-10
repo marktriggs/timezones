@@ -1,10 +1,10 @@
 (ns timezones
   (:require [compojure.route :as route]
             [net.cgrand.enlive-html :as html])
-  (:use [clojure.contrib.seq-utils :only [positions indexed]]
-        clojure.contrib.str-utils
-        ring.adapter.jetty
-        compojure.core)
+  (:use ring.adapter.jetty
+        compojure.core
+        compojure.handler
+        clojure.xml)
   (:gen-class)
   (:import (java.util TimeZone Date Calendar)
            (java.text SimpleDateFormat)
@@ -15,9 +15,9 @@
            (org.apache.batik.transcoder TranscoderInput TranscoderOutput)))
 
 
-(def *known-timezones* (set (TimeZone/getAvailableIDs)))
+(def known-timezones (set (TimeZone/getAvailableIDs)))
 
-(def *template-file* (or (ClassLoader/getSystemResource "template.tpl")
+(def template-file (or (ClassLoader/getSystemResource "template.tpl")
                          (throw (Exception. "Couldn't find my template file"))))
 
 
@@ -31,9 +31,9 @@
 
 (def point-style "fill:#ff0000;fill-opacity:1")
 
-(def *line-length* 50)
-(def *point-size* 5)
-(def *line-offset* 120)
+(def line-length 50)
+(def point-size 5)
+(def line-offset 120)
 
 
 (defn draw-line [x y length & [style]]
@@ -47,13 +47,13 @@
   [{:tag "circle"
     :attrs {"cx" x
             "cy" y
-            "r" *point-size*
+            "r" point-size
             "style" point-style}}
    {:tag "text"
     :attrs {"x" x
             "y" y
             "dx" (format "-%fem" (float (/ (count label) 3)))
-            "dy" (* 4 *point-size*)
+            "dy" (* 4 point-size)
             "font-family" "Bitstream Vera Sans"
             "font-size" "12px"}
     :content [label]}
@@ -61,7 +61,7 @@
     :attrs {"x" x
             "y" y
             "dx" "-2em"
-            "dy" (* 8 *point-size*)
+            "dy" (* 8 point-size)
             "font-family" "Bitstream Vera Sans"
             "font-size" "10px"}
     :content [day]}])
@@ -78,16 +78,22 @@
     :content [label]})
 
 
+(defn positions [pred coll]
+  (keep-indexed (fn [idx elt] (when (pred elt) idx))
+                coll))
+
+
 (defn draw-work-hours [hours y-offset]
   (map (fn [position]
-         (draw-line (+ *line-offset* (* position *line-length*))
+         (draw-line (+ line-offset (* position line-length))
                     y-offset
-                    *line-length*
+                    line-length
                     work-hours-style))
        (remove #(= % (dec (count hours)))
-               (positions #(and (>= (:hour %) 7)
-                                (< (:hour %) 18))
-                          hours))))
+                (positions (fn [elt]
+                             (and (>= (:hour elt) 7)
+                                  (< (:hour elt) 18)))
+                           hours))))
 
 
 (defn format-hour [hour]
@@ -103,20 +109,26 @@
 
 (defn draw-timeline [y-offset timeline]
   (concat
-   [(draw-line *line-offset* y-offset (* (dec 24) *line-length*))
+   [(draw-line line-offset y-offset (* (dec 24) line-length))
     (draw-label y-offset (name-from-timezone (:timezone timeline)))]
    (draw-work-hours (:hours timeline) y-offset)
-   (mapcat (fn [[idx hour]]
-             (draw-point (+ *line-offset* (* idx *line-length*))
-                         y-offset
-                         (format-hour hour)
-                         (:day hour)))
-           (indexed (:hours timeline)))))
+   (apply concat
+    (map-indexed (fn [idx hour]
+                   (draw-point (+ line-offset (* idx line-length))
+                               y-offset
+                               (format-hour hour)
+                               (:day hour)))
+                 (:hours timeline)))))
 
+
+(defn fix-timezone [zone]
+  ;; Java's GMT zones are flipped!  GMT+2 is two hours *behind* GMT
+  (cond (re-matches #"^Etc/GMT\+[0-9]+$" zone) (.replace zone "+" "-")
+        (re-matches #"^Etc/GMT-[0-9]+$" zone) (.replace zone "-" "+")
+        :else zone))
 
 (defn generate-svg [timezones & [at-date]]
   (let [home-timezone (TimeZone/getTimeZone (first timezones))
-
         at-date (or at-date
                     (let [now (.getTime (Calendar/getInstance home-timezone))]
                       (.format (java.text.SimpleDateFormat. "yyyy-MM-dd")
@@ -127,7 +139,7 @@
                             (.parse at-date))
 
         timelines (map (fn [timezone]
-                         (let [tz (TimeZone/getTimeZone timezone)
+                         (let [tz (TimeZone/getTimeZone (fix-timezone timezone))
                                cal (doto (Calendar/getInstance tz)
                                      (.setTime home-start-time))
                                sdf (doto (java.text.SimpleDateFormat. "dd-MMM")
@@ -147,7 +159,7 @@
         :attrs {"xmlns:dc" "http://purl.org/dc/elements/1.1/"
                 "xmlns:svg" "http://www.w3.org/2000/svg"
                 "xmlns" "http://www.w3.org/2000/svg"
-                "width" (str (+ *line-offset* (* *line-length* 24)))
+                "width" (str (+ line-offset (* line-length 24)))
                 "height" (* 100 (inc (count timezones)))
                 "id" "svg2"
                 "version" "1.1"}
@@ -159,13 +171,13 @@
                   (iterate #(+ 100 %) 100)))}))))
 
 
-(html/defsnippet timezone-entry *template-file*
+(html/defsnippet timezone-entry template-file
   [:#timezones [:li (html/nth-of-type 1)]]
   [timezone]
   [:li] (html/content timezone))
 
 
-(html/deftemplate index *template-file* [timezones]
+(html/deftemplate index template-file [timezones]
   [:#timezones] (html/content (map timezone-entry timezones)))
 
 
@@ -191,7 +203,8 @@
 
 
 (defroutes main-routes
-  (GET "/" {{:strs [zones jpeg at-date at date on]} :params}
+  (GET "/favicon.ico" [] {:status 404 :headers [] :body ""})
+  (GET "/" {{:keys [zones jpeg at-date at date on]} :params}
        (if zones
          (try (let [svg (generate-svg (.split zones ",")
                                       (or at-date at date on))]
@@ -205,9 +218,10 @@
                  :body "I have no idea what you're talking about."}
                 (.printStackTrace e)))
          {:headers {"Content-type" "text/html"}
-          :body (index (sort *known-timezones*))}))
+          :body (index (sort known-timezones))})
+       )
   (route/files "/" {:root "static"}))
 
 
 (defn -main [port]
-  (run-jetty (var main-routes) {:port (Integer. port)}))
+  (run-jetty (-> (var main-routes) compojure.handler/api) {:port (Integer. port)}))

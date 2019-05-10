@@ -1,7 +1,7 @@
 <html>
 
   <head>  
-    <link type="text/css" href="css/ui-lightness/jquery-ui-1.8.9.custom.css" rel="stylesheet" />	
+    <link type="text/css" href="css/ui-lightness/jquery-ui-1.8.9.custom.css" rel="stylesheet" />        
     <script type="text/javascript" src="js/jquery-1.4.4.min.js"></script>
     <script type="text/javascript" src="js/jquery-ui-1.8.9.custom.min.js"></script>
 
@@ -27,12 +27,14 @@
         $("#go").click(function (event) {
           var timezones = $("#targets li").filter(".timezone");
           if (timezones.length > 0) {
-	    var arr = timezones.map (function (idx, elt) {
-	      return $(elt).text ();
-	    });
+            var arr = timezones.map (function (idx, elt) {
+              return $(elt).text ();
+            });
 
             var options = [];
-            options.push ('zones=' + arr.toArray ().join (","));
+            options.push ('zones=' + arr.toArray().map(function (elt) {
+                return encodeURIComponent(elt);
+            }).join (","));
 
             if ($("#use-jpeg").is (':checked')) {
                 options.push ('jpeg=true');
